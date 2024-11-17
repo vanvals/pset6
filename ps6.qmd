@@ -1,7 +1,7 @@
 ---
 title: "Problem Set 6 - Waze Shiny Dashboard"
 author: "Peter Ganong, Maggie Shi, and Andre Oviedo"
-date: today
+date: November 23, 2024
 format: 
   pdf:
     include-in-header: 
@@ -24,9 +24,9 @@ We use (`*`) to indicate a problem that we think might be time consuming.
 # Steps to submit (10 points on PS6) {-}
 
 1. "This submission is my work alone and complies with the 30538 integrity
-policy." Add your initials to indicate your agreement: \*\*\_\_\*\*
-2. "I have uploaded the names of anyone I worked with on the problem set **[here](https://docs.google.com/forms/d/185usrCREQaUbvAXpWhChkjghdGgmAZXA3lPWpXLLsts/edit)**"  \*\*\_\_\*\* (2 point)
-3. Late coins used this pset: \*\*\_\_\*\* Late coins left after submission: \*\*\_\_\*\*
+policy." Add your initials to indicate your agreement: \*\*sv\*\*
+2. "I have uploaded the names of anyone I worked with on the problem set **[here](https://docs.google.com/forms/d/185usrCREQaUbvAXpWhChkjghdGgmAZXA3lPWpXLLsts/edit)**"  \*\*sv\*\* (2 point)
+3. Late coins used this pset: \*\*1/4\*\* Late coins left after submission: \*\*3/4\*\*
 
 4. Before starting the problem set, make sure to read and agree to the terms of data usage for the Waze data [here](https://canvas.uchicago.edu/courses/59054/quizzes/130617).
 
@@ -40,7 +40,7 @@ policy." Add your initials to indicate your agreement: \*\*\_\_\*\*
 *IMPORTANT: For the App portion of the PS, in case you can not arrive to the expected functional dashboard we will need to take a look at your `app.py` file. You can use the following code chunk template to "import" and print the content of that file. Please, don't forget to also tag the corresponding code chunk as part of your submission!*
 
 ```{python}
-#| echo: true
+#| echo: false
 #| eval: false
 
 def print_file_contents(file_path):
@@ -82,46 +82,291 @@ import json
 ## Data Download and Exploration (20 points){-} 
 
 1. 
+```{python}
+# read in the sample data
+df_sample = pd.read_csv("waze_data/waze_data_sample.csv")
+```
 
 ```{python}
-
+print(df_sample.columns)
 ```
+
+Variable Names/Data Types:
+
+Unnamed:0     Ordinal 
+city          Nominal
+confidence    Ordinal
+nThumbsUp     Ordinal
+street        Nominal
+uuid          Ordinal
+country       Nominal
+type          Nominal
+subtype       Ordinal 
+roadType      Ordinal
+reliability   Ordinal
+magvar        Ordinal   
+reportRating  Ordinal
 
 2. 
+```{python}
+# read in the data
+df_full = pd.read_csv("waze_data/waze_data.csv")
+```
 
 ```{python}
+# data frame for plotting with null counts for each variable
+data = pd.DataFrame({
+    'variable': df_full.columns,
+    'null_count': df_full.isnull().sum(),
+    'non_null_count': df_full.notnull().sum()
+})
+
+# melt the data
+data_melted = data.melt(
+    id_vars='variable', var_name='status', value_name='count')
+
+# Ccreate the bar chart
+alt.Chart(data_melted).mark_bar().encode(
+    x=alt.X('variable:N', title='Variable'),
+    y=alt.Y('count:Q', title='Number of Observations'),
+    color=alt.Color('status:N', scale=alt.Scale(domain=['null_count', 'non_null_count'], range=['pink', 'purple']),
+                    title='Status', legend=alt.Legend(title="Status"))
+).properties(
+    title='Null vs. Non-Null Observations per Variable'
+)
 
 ```
 
+nThumbsUp, street, and subtype have missing values. nThumbsUp has almost all values missing, while subtype has a much smaller number of missing values and street has a few missing values.
+
 3. 
+```{python}
+#find unique types
+unique_types = df_full['type'].unique()
+print("Unique values in 'type':", unique_types)
+```
 
 ```{python}
+# find unique subtypes
+unique_subtypes = df_full['subtype'].unique()
+print("Unique values in 'subtype':", unique_subtypes)
+```
 
+```{python}
+# how many types have a subtype that is NA? 
+subtypes_count_nas = df_full[df_full['subtype'].isna()]['type'].nunique()
+print(f"Number of types with NA subtypes: {subtypes_count_nas}") 
+```
+
+All four categories in the type columns have subtypes that have NAs.
+
+Traffic
+  * Light
+  * Moderate
+  * Heavy
+  * Stand-still
+  * Unclassified
+
+Accident
+  * Major
+  * Minor
+  * Unclassified
+
+Road Closed
+  * Event
+  * Construction
+  * Hazard
+  * Unclassified
+
+Hazard
+  * On Road
+      * Stopped car
+      * Construction
+      * Emergency vehicle
+      * Ice
+      * Object
+      * Pot hole
+      * Faulty traffic light
+      * Lane closed
+      * Road kill
+  * On Shoulder
+      * Stopped car
+      * Animals
+      * Missing Sign
+  * Weather
+      * Flood
+      * Fog
+      * Heavy snow
+      * Hail
+  * Unclassified
+
+NAs: 12% of the subtype columns - 96,086 rows - have missing values. This seems like a lot of rows to omit from the data, so I think they should be kept and categorized as 'unclassified'.
+
+```{python}
+# replace NAs with "unclassified"
+df_full['subtype'] = df_full['subtype'].fillna('Unclassified')
 ```
 
 4. 
-
-1. 
+a. 
 ```{python}
+# create the df
+crosswalk = df_full.drop_duplicates(subset=["type", "subtype"]).copy()
 
+# keep type and subtype columns - we will add the updated type, subtybe, and subsubtype in next step
+crosswalk = crosswalk.loc[:, ["type", "subtype"]]
 ```
 
-2. 
-
+b.
 ```{python}
+crosswalk_data = []
 
+# Loop over the combinations of type and subtype to populate the updated columns
+for _, row in crosswalk.iterrows():
+    type_val = row['type']
+    subtype_val = row['subtype']
+
+    updated_type = None
+    updated_subtype = None
+    updated_subsubtype = None
+
+    if type_val == 'JAM':
+        updated_type = 'Traffic'
+        if subtype_val == 'JAM_LIGHT_TRAFFIC':
+            updated_subtype = 'Light'
+        elif subtype_val == 'JAM_MODERATE_TRAFFIC':
+            updated_subtype = 'Moderate'
+        elif subtype_val == 'JAM_HEAVY_TRAFFIC':
+            updated_subtype = 'Heavy'
+        elif subtype_val == 'JAM_STAND_STILL_TRAFFIC':
+            updated_subtype = 'Stand-still'
+        else:
+            updated_subtype = 'Unclassified'
+            updated_subsubtype = None
+
+    elif type_val == 'ACCIDENT':
+        updated_type = 'Accident'
+        if subtype_val == 'ACCIDENT_MAJOR':
+            updated_subtype = 'Major'
+        elif subtype_val == 'ACCIDENT_MINOR':
+            updated_subtype = 'Minor'
+        else:
+            updated_subtype = 'Unclassified'
+            updated_subsubtype = None
+
+    elif type_val == 'ROAD_CLOSED':
+        updated_type = 'Road Closed'
+        if subtype_val == 'ROAD_CLOSED_EVENT':
+            updated_subtype = 'Event'
+        elif subtype_val == 'ROAD_CLOSED_CONSTRUCTION':
+            updated_subtype = 'Construction'
+        elif subtype_val == 'ROAD_CLOSED_HAZARD':
+            updated_subtype = 'Hazard'
+        else:
+            updated_subtype = 'Unclassified'
+            updated_subsubtype = None
+
+    elif type_val == 'HAZARD':
+        updated_type = 'Hazard'
+
+        if 'HAZARD_ON_ROAD' in subtype_val:
+            updated_subtype = 'On Road'
+            if 'CAR_STOPPED' in subtype_val:
+                updated_subsubtype = 'Stopped car'
+            elif 'CONSTRUCTION' in subtype_val:
+                updated_subsubtype = 'Construction'
+            elif 'EMERGENCY_VEHICLE' in subtype_val:
+                updated_subsubtype = 'Emergency vehicle'
+            elif 'ICE' in subtype_val:
+                updated_subsubtype = 'Ice'
+            elif 'OBJECT' in subtype_val:
+                updated_subsubtype = 'Object'
+            elif 'POT_HOLE' in subtype_val:
+                updated_subsubtype = 'Pot hole'
+            elif 'TRAFFIC_LIGHT_FAULT' in subtype_val:
+                updated_subsubtype = 'Faulty traffic light'
+            elif 'LANE_CLOSED' in subtype_val:
+                updated_subsubtype = 'Lane closed'
+            elif 'ROAD_KILL' in subtype_val:
+                updated_subsubtype = 'Road kill'
+            else:
+                updated_subsubtype = 'Unclassified'
+
+        elif 'HAZARD_ON_SHOULDER' in subtype_val:
+            updated_subtype = 'On Shoulder'
+            if 'CAR_STOPPED' in subtype_val:
+                updated_subsubtype = 'Stopped car'
+            elif 'ANIMALS' in subtype_val:
+                updated_subsubtype = 'Animals'
+            elif 'MISSING_SIGN' in subtype_val:
+                updated_subsubtype = 'Missing Sign'
+            else:
+                updated_subsubtype = 'Unclassified'
+
+        elif 'HAZARD_WEATHER' in subtype_val:
+            updated_subtype = 'Weather'
+            if 'FLOOD' in subtype_val:
+                updated_subsubtype = 'Flood'
+            elif 'FOG' in subtype_val:
+                updated_subsubtype = 'Fog'
+            elif 'HEAVY_SNOW' in subtype_val:
+                updated_subsubtype = 'Heavy snow'
+            elif 'HAIL' in subtype_val:
+                updated_subsubtype = 'Hail'
+            else:
+                updated_subsubtype = 'Unclassified'
+
+        else:
+            updated_subtype = 'Unclassified'
+            updated_subsubtype = None
+
+    crosswalk_data.append(
+        [type_val, subtype_val, updated_type, updated_subtype, updated_subsubtype])
+
+# Create final crosswalk df
+crosswalk = pd.DataFrame(crosswalk_data, columns=[
+                         'type', 'subtype', 'updated_type', 'updated_subtype', 'updated_subsubtype'])
 ```
 
-3. 
-
+c.
 ```{python}
-
+# merge with original data on "type" and "subtype"
+merged_data = df_full.merge(crosswalk[['type', 'subtype', 'updated_type', 'updated_subtype', 'updated_subsubtype']],
+                            on=['type', 'subtype'], how='left')
 ```
 
-4. 
+```{python}
+accident_unclassified_rows = merged_data[(merged_data['updated_type'] == 'Accident') &
+                                         (merged_data['updated_subtype'] == 'Unclassified')]
+
+num_rows_accident_unclassified = accident_unclassified_rows.shape[0]
+
+print(
+    f"Number of rows for 'Accident - Unclassified': {num_rows_accident_unclassified}")
+```
 
 ```{python}
+merged_data.query(
+    "updated_type == 'Accident' and updated_subtype == 'Unclassified'").shape[0]
+```
 
+There are 24359 rows for Accident - Unclassified.
+
+d. Extra Credit
+
+```{python}
+# check that the crosswalk and new merged data have the same values in type and subtype
+type_merged = merged_data['type'].unique()
+type_crosswalk = crosswalk['type'].unique()
+
+subtype_merged = merged_data['subtype'].unique()
+subtype_crosswalk = crosswalk['subtype'].unique()
+
+print("\nUnique 'type' values in merged dataset:", type_merged)
+print("Unique 'type' values in crosswalk:", type_crosswalk)
+
+print("\nUnique 'subtype' values in merged dataset:", subtype_merged)
+print("Unique 'subtype' values in crosswalk:", subtype_crosswalk)
 ```
 
 
@@ -173,6 +418,18 @@ geo_data = alt.Data(values=chicago_geojson["features"])
 ```
 
 4. 
+
+a. 
+```{python}
+# define pandas DataFrame with five columns
+crosswalk = pd.DataFrame({
+    'type': unique_combinations['type'],
+    'subtype': unique_combinations['subtype'],
+    'updated_type': '',  
+    'updated_subtype': '', 
+    'updated_subsubtype': ''  
+})
+```
 
 ```{python}
 
