@@ -75,6 +75,10 @@ import numpy as np
 alt.data_transformers.disable_max_rows() 
 
 import json
+import re
+import requests
+from dash import Dash, dcc, html, Input, Output
+from shiny import App, render, ui, reactive
 ```
 
 # Background {-}
@@ -353,7 +357,6 @@ merged_data.query(
 There are 24359 rows for Accident - Unclassified.
 
 d. Extra Credit
-
 ```{python}
 # check that the crosswalk and new merged data have the same values in type and subtype
 type_merged = merged_data['type'].unique()
@@ -369,70 +372,154 @@ print("\nUnique 'subtype' values in merged dataset:", subtype_merged)
 print("Unique 'subtype' values in crosswalk:", subtype_crosswalk)
 ```
 
-
 # App #1: Top Location by Alert Type Dashboard (30 points){-}
 
 1. 
 
 a. 
 ```{python}
+# function to extract latitude and longitude
+def extract_coordinates(geo):
+    match = re.match(r"POINT\((-?\d+\.\d+)\s(-?\d+\.\d+)\)", geo)
+    if match:
+        return float(match.group(1)), float(match.group(2))
+    return None, None
 
+
+# apply the function to create a new column 'latlon_list'
+merged_data['latlon_list'] = merged_data['geo'].apply(extract_coordinates)
+
+# create new columns for latitude and longitude from the list column
+merged_data[['latitude', 'longitude']] = pd.DataFrame(
+    merged_data['latlon_list'].tolist(), index=merged_data.index)
 ```
+
+Source: I put the following prompt into ChatGPT --  
+"I have a geoWKT column that contains data in this format: POINT(-87.624816 41.753358). Put together a regular expression that extracts the coordinates." and it gave me this: POINT\((-?\d+\.\d+)\s(-?\d+\.\d+)\)
+
+I also used this post: https://stackoverflow.com/questions/35491274/split-a-pandas-column-of-lists-into-multiple-columns
 
 b. 
 ```{python}
+# create the bins
+step = 0.01
+merged_data["latBin"] = (
+    (merged_data.latitude / step).round()).astype(float) * step
+merged_data["lonBin"] = (
+    (merged_data.longitude / step).round()).astype(float) * step
 
+# make sure all bins rounded to two decimal places
+merged_data["latBin"] = merged_data["latBin"].map(lambda x: f"{x:.2f}")
+merged_data["lonBin"] = merged_data["lonBin"].map(lambda x: f"{x:.2f}")
 ```
 
+```{python}
+merged_data.to_csv('waze_data/merged_data.csv', index=False)
+```
+
+```{python}
+# create the groups and see which combination has the greatest number of observations
+groups = merged_data.groupby(["latBin", "lonBin"]).size()
+max_group = groups.idxmax()
+max_count = groups.max()
+
+print(f"The latitude-longitude combination with the greatest number of observations is {max_group} with {max_count} observations.")
+```
+
+Source: https://stackoverflow.com/questions/39254704/pandas-group-bins-of-data-per-longitude-latitude
 
 c. 
 ```{python}
+# collapse data to top ten bins for minor accidents and create df
+top_alerts_df = (merged_data[(merged_data['type'] == 'ACCIDENT') & (merged_data['subtype'] == 'ACCIDENT_MINOR')]
+                 .groupby(['latBin', 'lonBin'])
+                 .size()
+                 .reset_index(name="alert_count")
+                 .sort_values(by="alert_count", ascending=False)
+                 .head(10))
 
+# save to csv
+top_alerts_df.to_csv('top_alerts_map/top_alerts_map.csv', index=False)
 ```
 
-d. 
-```{python}
+The level of aggregation in this case is the number of minor accidents per certain lat/lon bins. There are 10 rows in the dataframe because we filtered to the top 10 lat/lon bins in terms of number of alerts for this chosen type and subtype. 
 
+2. 
+```{python}
+# create the top ten df for Jam - Heavy Traffic alerts
+jam_heavy_traffic_df = (merged_data[(merged_data['type'] == 'JAM') & (merged_data['subtype'] == 'JAM_HEAVY_TRAFFIC')]
+                 .groupby(['latBin', 'lonBin'])
+                 .size()
+                 .reset_index(name="alert_count")
+                 .sort_values(by="alert_count", ascending=False)
+                 .head(10))
+
+# make the plot
+alt.Chart(jam_heavy_traffic_df).mark_circle().encode(
+    x=alt.X('lonBin:Q', scale=alt.Scale(domain=[41.87, 41.99]), title='Longitude'),
+    y=alt.Y('latBin:Q', scale=alt.Scale(domain=[-87.79, -87.64]), title='Latitude'),
+    size=alt.Size(
+        'alert_count:Q',
+        scale=alt.Scale(domain=[2000, 4500], range=[50, 500]),
+        title='Number of Alerts')
+).properties(
+    title='Top 10 Latitude-Longitude Bins for "Jam - Heavy Traffic" Alerts')
 ```
 
 3. 
     
 a. 
-
 ```{python}
+url = "https://data.cityofchicago.org/api/geospatial/bbvz-uum9?method=export&format=GeoJSON"
+output_file = "/Users/saravanvalkenburgh/Documents/GitHub/pset6/top_alerts_map/chicago_neighborhood_boundaries.geojson"
+response = requests.get(url)
 
-```
-    
+if response.status_code == 200:
+    with open(output_file, "wb") as file:
+        file.write(response.content)
+```    
+
+Source: https://realpython.com/python-download-file-from-url/
 
 b. 
 ```{python}
-# MODIFY ACCORDINGLY
-file_path = "./top_alerts_map/chicago-boundaries.geojson"
-#----
+file_path = "/Users/saravanvalkenburgh/Documents/GitHub/pset6/top_alerts_map/chicago_neighborhood_boundaries.geojson"
 
 with open(file_path) as f:
     chicago_geojson = json.load(f)
 
 geo_data = alt.Data(values=chicago_geojson["features"])
-
 ```
 
 4. 
 
 a. 
 ```{python}
-# define pandas DataFrame with five columns
-crosswalk = pd.DataFrame({
-    'type': unique_combinations['type'],
-    'subtype': unique_combinations['subtype'],
-    'updated_type': '',  
-    'updated_subtype': '', 
-    'updated_subsubtype': ''  
-})
-```
 
-```{python}
+# create the map from the geoJSON file
+map_layer = alt.Chart(geo_data).mark_geoshape(
+    fill="lightgray",
+    stroke="black"
+)
 
+# create the scatter plot layer
+scatter_layer = alt.Chart(jam_heavy_traffic_df).mark_circle().encode(
+    x=alt.X('lonBin:Q', scale=alt.Scale(domain=[41.87, 41.99]), title='Longitude'),
+    y=alt.Y('latBin:Q', scale=alt.Scale(domain=[-87.79, -87.64]), title='Latitude'),
+    size=alt.Size(
+        'alert_count:Q',
+        scale=alt.Scale(domain=[2400, 4400], range=[50, 500]),
+        title='Number of Alerts'
+    ),
+    color=alt.value('blue')
+)
+
+# Layer the two plots 
+layered_plot = (map_layer + scatter_layer).properties(
+    title="Chicago Neighborhood Boundaries with 'Jam - Heavy Traffic' Alerts"
+)
+
+layered_plot
 ```
 
 5. 
@@ -440,7 +527,26 @@ crosswalk = pd.DataFrame({
 a. 
 
 ```{python}
+types_and_subtypes = {
+    "Traffic": ["Light", "Moderate", "Heavy", "Stand-still"],
+    "Accident": ["Major", "Minor"],
+    "Road Closed": ["Event", "Construction", "Hazard"],
+    "Hazard": ["On Road", "On Shoulder", "Weather"]
+}
 
+app_ui = ui.page_fluid(
+    ui.h2("Top 10 Alerts by Type and Subtype"),
+    ui.input_select(
+        id="type_dropdown",
+        label="Select Type:",
+        choices=list(types_and_subtypes.keys())
+        ui.input_select(
+            id="subtype_dropdown",
+            label="Select Subtype:",
+            choices=[]
+        ),
+        ui.output_plot("layered_plot")
+    ))
 ```
 
 b. 
