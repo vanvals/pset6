@@ -1,33 +1,57 @@
 from shiny import App, render, ui, reactive
 import pandas as pd
 import altair as alt
+import os
+import json
+
+types_and_subtypes = {
+    "Traffic": ["Light", "Moderate", "Heavy", "Stand-still"],
+    "Accident": ["Major", "Minor"],
+    "Road Closed": ["Event", "Construction", "Hazard"],
+    "Hazard": ["On Road", "On Shoulder", "Weather"]
+}
 
 app_ui = ui.page_fluid(
     ui.h2("Top 10 Alerts by Type and Subtype"),
     ui.input_select(
-        id="dropdown",
-        label="Select Type and Subtype:",
-        choices=[
-            f"{row['type']} - {row['subtype']}"
-            for _, row in merged_data[['type', 'subtype']].drop_duplicates().iterrows()
-        ],
+        id="type_dropdown",
+        label="Select Type:",
+        choices=list(types_and_subtypes.keys())
     ),
-    ui.output_plot("layered_plot"))
+    ui.input_select(
+        id="subtype_dropdown",
+        label="Select Subtype:",
+        choices=[]
+    ),
+    ui.output_plot("layered_plot")
+)
 
 
 def server(input, output, session):
     @reactive.Calc
     def full_data():
-        return pd.read_csv("merged_data/waze_data.csv")
-    
-    def filtered_data():
-        selected = input.dropdown().split(" - ")
-        alert_type, alert_subtype = selected[0], selected[1]
+        return pd.read_csv("top_alerts_map/merged_data.csv")
 
+    def geo_data():
+        with open("path_to_chicago_geojson_file.geojson", "r") as f:
+            chicago_geojson = json.load(f)
+        return alt.Data(values=chicago_geojson["features"])
+
+    @reactive.Effect
+    def update_subtype_dropdown():
+        selected_type = input.type_dropdown()
+        subtypes = types_and_subtypes.get(selected_type, [])
+        ui.update_select("subtype_dropdown", choices=subtypes)
+
+    def filtered_data():
+        alert_type = input.type_dropdown()
+        alert_subtype = input.subtype_dropdown()
+
+        data = full_data()
         filtered = (
-            merged_data[
-                (merged_data["type"] == alert_type) &
-                (merged_data["subtype"] == alert_subtype)
+            data[
+                (data["type"] == alert_type) &
+                (data["subtype"] == alert_subtype)
             ]
             .groupby(["latBin", "lonBin"])
             .size()
