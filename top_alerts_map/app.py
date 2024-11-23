@@ -1,57 +1,51 @@
 from shiny import App, render, ui, reactive
+from shinywidgets import render_altair, output_widget
 import pandas as pd
 import altair as alt
 import os
 import json
 
 types_and_subtypes = {
-    "Traffic": ["Light", "Moderate", "Heavy", "Stand-still"],
-    "Accident": ["Major", "Minor"],
-    "Road Closed": ["Event", "Construction", "Hazard"],
-    "Hazard": ["On Road", "On Shoulder", "Weather"]
+    "Traffic": ["Light", "Moderate", "Heavy", "Stand-still", "Unclassified"],
+    "Accident": ["Major", "Minor", "Unclassified"],
+    "Road Closed": ["Event", "Construction", "Hazard", "Unclassified"],
+    "Hazard": ["On Road", "On Shoulder", "Weather", "Unclassified"]
 }
 
 app_ui = ui.page_fluid(
-    ui.h2("Top 10 Alerts by Type and Subtype"),
+    ui.h2("Top 10 Waze Alerts by Type and Subtype in Chicago"),
     ui.input_select(
-        id="type_dropdown",
-        label="Select Type:",
-        choices=list(types_and_subtypes.keys())
+        id="type_subtype_dropdown",
+        label="Select Type and Subtype:",
+        choices=[f"{t}: {s}" for t, subtypes in types_and_subtypes.items()
+                 for s in subtypes]
     ),
-    ui.input_select(
-        id="subtype_dropdown",
-        label="Select Subtype:",
-        choices=[]
-    ),
-    ui.output_plot("layered_plot")
+    output_widget("layered_plot")
 )
 
 
 def server(input, output, session):
-    @reactive.Calc
+    @reactive.calc
     def full_data():
-        return pd.read_csv("top_alerts_map/merged_data.csv")
+        return pd.read_csv("merged_data.csv")
 
+    @reactive.calc
     def geo_data():
-        with open("path_to_chicago_geojson_file.geojson", "r") as f:
+        with open("chicago_neighborhood_boundaries.geojson", "r") as f:
             chicago_geojson = json.load(f)
         return alt.Data(values=chicago_geojson["features"])
 
-    @reactive.Effect
-    def update_subtype_dropdown():
-        selected_type = input.type_dropdown()
-        subtypes = types_and_subtypes.get(selected_type, [])
-        ui.update_select("subtype_dropdown", choices=subtypes)
-
+    @reactive.calc
     def filtered_data():
-        alert_type = input.type_dropdown()
-        alert_subtype = input.subtype_dropdown()
+        selected = input.type_subtype_dropdown()
+
+        selected_type, selected_subtype = selected.split(": ")
 
         data = full_data()
         filtered = (
             data[
-                (data["type"] == alert_type) &
-                (data["subtype"] == alert_subtype)
+                (data["updated_type"] == selected_type) &
+                (data["updated_subtype"] == selected_subtype)
             ]
             .groupby(["latBin", "lonBin"])
             .size()
@@ -61,28 +55,33 @@ def server(input, output, session):
         )
         return filtered
 
-    @output
-    @render.plot
+    @render_altair
     def layered_plot():
         data = filtered_data()
+        geo_data_values = geo_data()
 
-        map_layer = alt.Chart(geo_data).mark_geoshape(
+        alert_min = data['alert_count'].min()
+        alert_max = data['alert_count'].max()
+
+        map_layer = alt.Chart(geo_data_values).mark_geoshape(
             fill="lightgray",
             stroke="black"
+        ).project(type='equirectangular'
+        ).properties(
+            width=800,
+            height=400
         )
 
-        scatter_layer = alt.Chart(data).mark_circle().encode(
-            x=alt.X('lonBin:Q', scale=alt.Scale(
-                domain=[-87.79, -87.64]), title="Longitude"),
-            y=alt.Y('latBin:Q', scale=alt.Scale(
-                domain=[41.87, 41.99]), title="Latitude"),
-            size=alt.Size('alert_count:Q', scale=alt.Scale(
-                domain=[2400, 4400], range=[50, 500])),
-            color=alt.value("blue")
-        ).properties(
-            title=f"Top 10 Locations for Alerts",
-            width=600,
-            height=400
+        scatter_layer = alt.Chart(data).mark_circle(size=100).encode(
+            latitude='latBin:Q',
+            longitude='lonBin:Q',
+            size=alt.Size(
+                'alert_count:Q',
+                scale=alt.Scale(
+                    domain=[alert_min, alert_max], range=[50, 500]),
+                title='Number of Alerts'
+            ),
+            color=alt.value('blue')
         )
 
         return map_layer + scatter_layer

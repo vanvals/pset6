@@ -69,7 +69,6 @@ print_file_contents("./top_alerts_map_byhour/app.py") # Change accordingly
 # Import required packages.
 import pandas as pd
 import altair as alt 
-import pandas as pd
 from datetime import date
 import numpy as np
 alt.data_transformers.disable_max_rows() 
@@ -390,7 +389,7 @@ def extract_coordinates(geo):
 merged_data['latlon_list'] = merged_data['geo'].apply(extract_coordinates)
 
 # create new columns for latitude and longitude from the list column
-merged_data[['latitude', 'longitude']] = pd.DataFrame(
+merged_data[['longitude', 'latitude']] = pd.DataFrame(
     merged_data['latlon_list'].tolist(), index=merged_data.index)
 ```
 
@@ -414,7 +413,7 @@ merged_data["lonBin"] = merged_data["lonBin"].map(lambda x: f"{x:.2f}")
 ```
 
 ```{python}
-merged_data.to_csv('waze_data/merged_data.csv', index=False)
+merged_data.to_csv('top_alerts_map/merged_data.csv', index=False)
 ```
 
 ```{python}
@@ -456,8 +455,8 @@ jam_heavy_traffic_df = (merged_data[(merged_data['type'] == 'JAM') & (merged_dat
 
 # make the plot
 alt.Chart(jam_heavy_traffic_df).mark_circle().encode(
-    x=alt.X('lonBin:Q', scale=alt.Scale(domain=[41.87, 41.99]), title='Longitude'),
-    y=alt.Y('latBin:Q', scale=alt.Scale(domain=[-87.79, -87.64]), title='Latitude'),
+    latitude='latBin:Q',
+    longitude='lonBin:Q',
     size=alt.Size(
         'alert_count:Q',
         scale=alt.Scale(domain=[2000, 4500], range=[50, 500]),
@@ -497,15 +496,16 @@ a.
 ```{python}
 
 # create the map from the geoJSON file
-map_layer = alt.Chart(geo_data).mark_geoshape(
+background = alt.Chart(geo_data).mark_geoshape(
     fill="lightgray",
     stroke="black"
-)
+).project(type="equirectangular")
+
 
 # create the scatter plot layer
-scatter_layer = alt.Chart(jam_heavy_traffic_df).mark_circle().encode(
-    x=alt.X('lonBin:Q', scale=alt.Scale(domain=[41.87, 41.99]), title='Longitude'),
-    y=alt.Y('latBin:Q', scale=alt.Scale(domain=[-87.79, -87.64]), title='Latitude'),
+points = alt.Chart(jam_heavy_traffic_df).mark_circle().encode(
+    latitude='latBin:Q',
+    longitude='lonBin:Q',
     size=alt.Size(
         'alert_count:Q',
         scale=alt.Scale(domain=[2400, 4400], range=[50, 500]),
@@ -515,7 +515,7 @@ scatter_layer = alt.Chart(jam_heavy_traffic_df).mark_circle().encode(
 )
 
 # Layer the two plots 
-layered_plot = (map_layer + scatter_layer).properties(
+layered_plot = (background + points).properties(
     title="Chicago Neighborhood Boundaries with 'Jam - Heavy Traffic' Alerts"
 )
 
@@ -523,48 +523,25 @@ layered_plot
 ```
 
 5. 
+a. As you can see in the screenshot below, there are 16 combinations of type and subtype in the dropdown menu.
 
-a. 
+![Dropdown Menu](Screenshots/dropdown.png){ width=400 }
 
-```{python}
-types_and_subtypes = {
-    "Traffic": ["Light", "Moderate", "Heavy", "Stand-still"],
-    "Accident": ["Major", "Minor"],
-    "Road Closed": ["Event", "Construction", "Hazard"],
-    "Hazard": ["On Road", "On Shoulder", "Weather"]
-}
+b. Jam - Heavy Traffic plot from aobve
 
-app_ui = ui.page_fluid(
-    ui.h2("Top 10 Alerts by Type and Subtype"),
-    ui.input_select(
-        id="type_dropdown",
-        label="Select Type:",
-        choices=list(types_and_subtypes.keys())
-        ui.input_select(
-            id="subtype_dropdown",
-            label="Select Subtype:",
-            choices=[]
-        ),
-        ui.output_plot("layered_plot")
-    ))
-```
+![Dropdown Menu](Screenshots/jam_heavy_traffic.png){ width=400 }
 
-b. 
-```{python}
+c. Alerts for road closures due to events are more common in the Northwest part of the city, as well as around what looks like the United Center and some in the Southwest part of the city. There are also some around Wrigley Field and Guaranteed Rate Field, and fewer but still some around Soldier Field.
 
-```
+![Dropdown Menu](Screenshots/events_road_closures.png){ width=400 }
 
-c. 
-```{python}
+d. Another question could be: Where are alerts for road closures due to construction the most common?
 
-```
+![Dropdown Menu](Screenshots/road_closed_construction.png){ width=400 }
 
-d. 
-```{python}
+Answer: Alerts for road closures due to construction are more common on the West and North sides of the city. There are no alerts for road closures due to contruction on the Southside in the top 10, which could say something about the city's priorities in terms of infrastructure projects.
 
-```
-
-e. 
+e. Another column that could enhance our analysis is the road type column. This would enable us to analyze which types of alerts are more prevalent on specific kinds of roads, such as primary streets, secondary streets, freeway, exit ramps, etc, which could be helpful in terms of urban and city planning and where to target infrastructure improvements.
 
 # App #2: Top Location by Alert Type and Hour Dashboard (20 points) {-}
 
