@@ -2,6 +2,9 @@
 title: "Problem Set 6 - Waze Shiny Dashboard"
 author: "Peter Ganong, Maggie Shi, and Andre Oviedo"
 date: November 23, 2024
+geometry: 
+    - margin=0.75in
+fontsize: 10pt
 format: 
   pdf:
     include-in-header: 
@@ -96,19 +99,19 @@ print(df_sample.columns)
 
 Variable Names/Data Types:
 
-Unnamed:0     Ordinal 
-city          Nominal
-confidence    Ordinal
-nThumbsUp     Ordinal
-street        Nominal
-uuid          Ordinal
-country       Nominal
-type          Nominal
-subtype       Ordinal 
-roadType      Ordinal
-reliability   Ordinal
-magvar        Ordinal   
-reportRating  Ordinal
+- Unnamed:0: Ordinal 
+- city: Nominal
+- confidence: Ordinal
+- nThumbsUp: Ordinal
+- street: Nominal
+- uuid: Ordinal
+- country: Nominal
+- type: Nominal
+- subtype: Ordinal 
+- roadType: Ordinal
+- reliability: Ordinal
+- magvar: Ordinal   
+- reportRating: Ordinal
 
 2. 
 ```{python}
@@ -128,17 +131,18 @@ data = pd.DataFrame({
 data_melted = data.melt(
     id_vars='variable', var_name='status', value_name='count')
 
-# Ccreate the bar chart
-alt.Chart(data_melted).mark_bar().encode(
+# Create the bar chart
+chart=alt.Chart(data_melted).mark_bar().encode(
     x=alt.X('variable:N', title='Variable'),
     y=alt.Y('count:Q', title='Number of Observations'),
     color=alt.Color('status:N', scale=alt.Scale(domain=['null_count', 'non_null_count'], range=['pink', 'purple']),
                     title='Status', legend=alt.Legend(title="Status"))
 ).properties(
-    title='Null vs. Non-Null Observations per Variable'
+    title='Null vs. Non-Null Observations'
 )
-
 ```
+
+![Bar Chart](Charts/nulls_non_nulls.png){ width=400 }
 
 nThumbsUp, street, and subtype have missing values. nThumbsUp has almost all values missing, while subtype has a much smaller number of missing values and street has a few missing values.
 
@@ -163,45 +167,45 @@ print(f"Number of types with NA subtypes: {subtypes_count_nas}")
 
 All four categories in the type columns have subtypes that have NAs.
 
-Traffic
-  * Light
-  * Moderate
-  * Heavy
-  * Stand-still
-  * Unclassified
+* Traffic
+    + Light
+    + Moderate
+    + Heavy
+    + Stand-still
+    + Unclassified
 
-Accident
-  * Major
-  * Minor
-  * Unclassified
+* Accident
+    + Major
+    + Minor
+    + Unclassified
 
-Road Closed
-  * Event
-  * Construction
-  * Hazard
-  * Unclassified
+* Road Closed
+    + Event
+    + Construction
+    + Hazard
+    + Unclassified
 
-Hazard
-  * On Road
-      * Stopped car
-      * Construction
-      * Emergency vehicle
-      * Ice
-      * Object
-      * Pot hole
-      * Faulty traffic light
-      * Lane closed
-      * Road kill
-  * On Shoulder
-      * Stopped car
-      * Animals
-      * Missing Sign
-  * Weather
-      * Flood
-      * Fog
-      * Heavy snow
-      * Hail
-  * Unclassified
+* Hazard
+    + On Road
+        - Stopped car
+        - Construction
+        - Emergency vehicle
+        - Ice
+        - Object
+        - Pot hole
+        - Faulty traffic light
+        - Lane closed
+        - Road kill
+    + On Shoulder
+        - Stopped car
+        - Animals
+        - Missing Sign
+    + Weather
+        - Flood
+        - Fog
+        - Heavy snow
+        - Hail
+    + Unclassified
 
 NAs: 12% of the subtype columns - 96,086 rows - have missing values. This seems like a lot of rows to omit from the data, so I think they should be kept and categorized as 'unclassified'.
 
@@ -329,6 +333,8 @@ for _, row in crosswalk.iterrows():
 # Create final crosswalk df
 crosswalk = pd.DataFrame(crosswalk_data, columns=[
                          'type', 'subtype', 'updated_type', 'updated_subtype', 'updated_subsubtype'])
+
+crosswalk.head()
 ```
 
 c.
@@ -336,16 +342,6 @@ c.
 # merge with original data on "type" and "subtype"
 merged_data = df_full.merge(crosswalk[['type', 'subtype', 'updated_type', 'updated_subtype', 'updated_subsubtype']],
                             on=['type', 'subtype'], how='left')
-```
-
-```{python}
-accident_unclassified_rows = merged_data[(merged_data['updated_type'] == 'Accident') &
-                                         (merged_data['updated_subtype'] == 'Unclassified')]
-
-num_rows_accident_unclassified = accident_unclassified_rows.shape[0]
-
-print(
-    f"Number of rows for 'Accident - Unclassified': {num_rows_accident_unclassified}")
 ```
 
 ```{python}
@@ -394,7 +390,7 @@ merged_data[['longitude', 'latitude']] = pd.DataFrame(
 ```
 
 Source: I put the following prompt into ChatGPT --  
-"I have a geoWKT column that contains data in this format: POINT(-87.624816 41.753358). Put together a regular expression that extracts the coordinates." and it gave me this: POINT\((-?\d+\.\d+)\s(-?\d+\.\d+)\)
+"I have a geoWKT column that contains data in this format: POINT(-87.624816 41.753358). Put together a regular expression that extracts the coordinates." and it gave me the expression in the code above.
 
 I also used this post: https://stackoverflow.com/questions/35491274/split-a-pandas-column-of-lists-into-multiple-columns
 
@@ -465,6 +461,8 @@ alt.Chart(jam_heavy_traffic_df).mark_circle().encode(
     title='Top 10 Latitude-Longitude Bins for "Jam - Heavy Traffic" Alerts')
 ```
 
+![scatter_plot](Charts/scatter1.png){ width=400 }
+
 3. 
     
 a. 
@@ -518,92 +516,283 @@ points = alt.Chart(jam_heavy_traffic_df).mark_circle().encode(
 layered_plot = (background + points).properties(
     title="Chicago Neighborhood Boundaries with 'Jam - Heavy Traffic' Alerts"
 )
-
-layered_plot
 ```
+
+![layered_plot](Charts/layerplot1.png){ width=400 }
 
 5. 
 a. As you can see in the screenshot below, there are 16 combinations of type and subtype in the dropdown menu.
 
 ![Dropdown Menu](Screenshots/dropdown.png){ width=400 }
 
-b. Jam - Heavy Traffic plot from aobve
+b. Jam - Heavy Traffic plot from above
 
-![Dropdown Menu](Screenshots/jam_heavy_traffic.png){ width=400 }
+![Jam - Heavy Traffic](Screenshots/jam_heavy_traffic.png){ width=400 }
 
 c. Alerts for road closures due to events are more common in the Northwest part of the city, as well as around what looks like the United Center and some in the Southwest part of the city. There are also some around Wrigley Field and Guaranteed Rate Field, and fewer but still some around Soldier Field.
 
-![Dropdown Menu](Screenshots/events_road_closures.png){ width=400 }
+![Road Closed - Event](Screenshots/events_road_closures.png){ width=400 }
 
 d. Another question could be: Where are alerts for road closures due to construction the most common?
 
-![Dropdown Menu](Screenshots/road_closed_construction.png){ width=400 }
+![Road Closed - Construction](Screenshots/road_closed_construction.png){ width=400 }
 
 Answer: Alerts for road closures due to construction are more common on the West and North sides of the city. There are no alerts for road closures due to contruction on the Southside in the top 10, which could say something about the city's priorities in terms of infrastructure projects.
 
 e. Another column that could enhance our analysis is the road type column. This would enable us to analyze which types of alerts are more prevalent on specific kinds of roads, such as primary streets, secondary streets, freeway, exit ramps, etc, which could be helpful in terms of urban and city planning and where to target infrastructure improvements.
 
+### App.py for App #1
+
+```{python}
+def print_file_contents(file_path):
+    """Print contents of a file."""
+    try:
+        with open(file_path, 'r') as f:
+            content = f.read()
+            print("```python")
+            print(content)
+            print("```")
+    except FileNotFoundError:
+        print("```python")
+        print(f"Error: File '{file_path}' not found")
+        print("```")
+    except Exception as e:
+        print("```python") 
+        print(f"Error reading file: {e}")
+        print("```")
+
+print_file_contents("./top_alerts_map/app.py")
+```
+
+
 # App #2: Top Location by Alert Type and Hour Dashboard (20 points) {-}
 
 1. 
 
-a. 
+a. The ts column is the timestamp of the reported alert. I think it makes sense to collapse the data by this column, but we need to be careful not to collapse our data TOO much, such as by date. It makes more sense to collapse the data by hour so that it does not result in too significant of data reduction, which could impact our analysis and ability to see patterns. 
 
-
-    
 b. 
 ```{python}
+# create a new variable called hour
+merged_data['hour'] = pd.to_datetime(merged_data['ts']).dt.strftime('%H')
 
+# convert to integers to better interact with slider
+merged_data['hour'] = merged_data['hour'].astype(int)
+```
+
+```{python}
+# new collapsed dataset
+collapsed_df = merged_data.groupby(
+    ['hour', 'updated_type', 'updated_subtype', 'latBin', 'lonBin']
+).size(
+).reset_index(name="alert_count"
+).sort_values(by="alert_count", ascending=False)
+```
+
+```{python}
+# count the number of rows
+print(len(collapsed_df))
+```
+
+This dataset has 62825 rows.
+
+```{python}
+# save to csv
+collapsed_df.to_csv('top_alerts_map_byhour/top_alerts_map_byhour.csv', index=False)
 ```
 
 c.
+```{python}
+# filter data for top ten locations by hour for "Jam - Heavy Traffic" 
+
+#7pm
+filter_1900 = collapsed_df[(collapsed_df['updated_type'] == 'Traffic') & (collapsed_df['updated_subtype'] == 'Heavy') & (collapsed_df['hour'] == '19')].head(10)
+
+#3pm
+filter_1500 = collapsed_df[(collapsed_df['updated_type'] == 'Traffic') & (collapsed_df['updated_subtype'] == 'Heavy') & (collapsed_df['hour'] == '15')].head(10)
+
+#12pm
+filter_1200 = collapsed_df[(collapsed_df['updated_type'] == 'Traffic') & (collapsed_df['updated_subtype'] == 'Heavy') & (collapsed_df['hour'] == '12')].head(10)
+```    
 
 ```{python}
+# 7pm plot
+background = alt.Chart(geo_data).mark_geoshape(
+    fill="lightgray",
+    stroke="black"
+).project(type="equirectangular")
 
+points = alt.Chart(filter_1900).mark_circle(
+    stroke="black",
+    strokeWidth=1
+).encode(
+    latitude='latBin:Q',
+    longitude='lonBin:Q',
+    size=alt.Size(
+        'alert_count:Q',
+        title='Number of Alerts'
+    )
+)
+
+layered_plot1900 = (background + points).properties(
+    title="Top 10 Locations for 'Jam - Heavy Traffic' Alerts: 7pm"
+)
+# 3pm plot
+background = alt.Chart(geo_data).mark_geoshape(
+    fill="lightgray",
+    stroke="black"
+).project(type="equirectangular")
+
+points = alt.Chart(filter_1500).mark_circle(
+    stroke="black",
+    strokeWidth=1
+).encode(
+    latitude='latBin:Q',
+    longitude='lonBin:Q',
+    size=alt.Size(
+        'alert_count:Q',
+        title='Number of Alerts'
+    )
+)
+
+layered_plot1500 = (background + points).properties(
+    title="Top 10 Locations for 'Jam - Heavy Traffic' Alerts: 3pm"
+)
+
+# 12pm plot
+background = alt.Chart(geo_data).mark_geoshape(
+    fill="lightgray",
+    stroke="black"
+).project(type="equirectangular")
+
+points = alt.Chart(filter_1200).mark_circle(
+    stroke="black",
+    strokeWidth=1
+).encode(
+    latitude='latBin:Q',
+    longitude='lonBin:Q',
+    size=alt.Size(
+        'alert_count:Q',
+        title='Number of Alerts'
+    )
+)
+
+layered_plot1200 = (background + points).properties(
+    title="Top 10 Locations for 'Jam - Heavy Traffic' Alerts: 12pm"
+)
 ```
-    
+
+![layered_plot1200 | layered_plot1500 | layered_plot1900](Charts/heavy_traffic_byhour.png){ width=700 }
 
 2.
 
-a. 
+a. What does the UI look like?
 
+![App2 UI](Screenshots/app2_ui.png){ width=400 }
 
+b. Recreate plots from above
 
-b. 
+![Jam - Heavy Traffic - 12pm](Screenshots/app2_ui.png){ width=400 }
 
+![Jam - Heavy Traffic - 3pm](Screenshots/jam_heavy_traffic_3pm.png){ width=400 }
 
-c. 
+![Jam - Heavy Traffic - 7pm](Screenshots/jam_heavy_traffic_7pm.png){ width=400 }
 
+c. It seems as though road construction is done more during the night hours, as seen by the plots below.
+
+![Road Closed: Construction - 6am](Screenshots/road_construction_6am.png){ width=400 }
+
+![Road Closed: Construction - 8am](Screenshots/road_construction_8pm.png){ width=400 }
+
+### App.py for App #2
+
+```{python}
+print_file_contents("./top_alerts_map_byhour/app.py")
+```
 
 # App #3: Top Location by Alert Type and Hour Dashboard (20 points){-}
 
 1. 
 
-
-a. 
+a. Yes, I think it would be a good idea to collapse the data by a range of hours. This will provide a more general view of the data make the UI easier for viewers, who will have fewer options to cycle through. It will make it easier to get a big picture idea of the types of alerts happening in Chicago for general times of day. It will also eliminate the problem I had in app 2 where some of the alerts had 0 or only 1 observation for certain hours. 
 
 b. 
-
 ```{python}
+# using collapsed_df from before, filter the data for 6-9am
+filtered_data = collapsed_df[
+    (collapsed_df["updated_type"] == "Traffic") &
+    (collapsed_df["updated_subtype"] == "Heavy") &
+    (collapsed_df["hour"] >= 6) & (collapsed_df["hour"] <= 9)
+].groupby(["latBin", "lonBin"]).agg(
+    alert_count=("alert_count", "sum")
+).reset_index(
+).head(10)
 
+# create the map from the geoJSON file
+background = alt.Chart(geo_data).mark_geoshape(
+    fill="lightgray",
+    stroke="black"
+).project(type="equirectangular")
+
+
+# create the scatter plot layer
+points = alt.Chart(filtered_data).mark_circle(stroke="black",
+                                              strokeWidth=1
+                                              ).encode(
+    latitude='latBin:Q',
+    longitude='lonBin:Q',
+    size=alt.Size(
+        'alert_count:Q',
+        title='Number of Alerts'
+    ),
+    color=alt.value('green')
+)
+
+# Layer the two plots
+layered_plot = (background + points).properties(
+    title="Chicago Neighborhood Boundaries with 'Jam - Heavy Traffic' Alerts from 6-9am"
+)
 ```
+
+![Jam: Heavy Traffic from 6-9am](Charts/heavy_traffic_6_9am.png){ width=400 }
 
 2. 
 
-a. 
+a. UI for App 3
 
+![App 3 UI](Screenshots/app3_ui.png){ width=400 }
 
-b. 
+b. Recreate plot for Jam: Heavy Traffic from 6-9am
+
+![Jam: Heavy Traffic - 6-9am ](Screenshots/jam_heavy_traffic_6_9am.png){ width=400 }
     
 3. 
 
-a. 
-    
+a. Screenshot of app with added switch button:
+
+![Added Switch Button ](Screenshots/switch_button.png){ width=400 }
+
+The possible values would be TRUE when the switch is in the "on" position and FALSE when the switch is in the "off" position
 
 b. 
 
+![Not Toggled](Screenshots/untoggled_switch.png){ width=400 }
+
+![Toggled](Screenshots/toggled_switch.png){ width=400 }
 
 c. 
 
+![Not Toggled](Screenshots/untoggled.png){ width=400 }
 
-d.
+![Toggled](Screenshots/toggled.png){ width=400 }
+
+d. Extra Credit
+
+In order to achieve a plot similar to the one below, I would need to add gridlines to my plot and labels with latitude and longtitude. I would need to filter the data in the server logic to distinguish between morning and afternoon hours, and then adjust my plot to display blue open circles for afternoon and red closed circles for morning. I would get rid of the hour slider and the toggle swith; they would no longer be needed; or alternatively, I would leave those in on the first page and create a second page where the plot with morning vs. afternoon hours displays.
+
+
+### App.py for App #3
+
+```{python}
+print_file_contents("./top_alerts_map_byhour_sliderrange/app.py")
+```
